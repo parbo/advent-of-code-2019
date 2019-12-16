@@ -49,7 +49,12 @@ pub struct GridValue {
     value: Option<i128>,
 }
 
-pub struct SparseGrid<'a> {
+pub trait IntoGridIterator {
+    type IntoGridIter;
+    fn grid_iter(&self) -> Self::IntoGridIter;
+}
+
+pub struct SparseGridIterator<'a> {
     grid: &'a HashMap<(i128, i128), i128>,
     min_x: i128,
     max_x: i128,
@@ -59,40 +64,61 @@ pub struct SparseGrid<'a> {
     y: i128,
 }
 
-impl<'a> SparseGrid<'a> {
-    fn new(grid: &'a HashMap<(i128, i128), i128>) -> SparseGrid<'a> {
+impl<'a> SparseGridIterator<'a> {
+    pub fn new(grid: &'a HashMap<(i128, i128), i128>) -> SparseGridIterator<'a> {
         let min_x = grid.iter().map(|p| (p.0).0).min().unwrap();
         let max_x = grid.iter().map(|p| (p.0).0).max().unwrap();
         let min_y = grid.iter().map(|p| (p.0).1).min().unwrap();
         let max_y = grid.iter().map(|p| (p.0).1).max().unwrap();
-	SparseGrid { grid, min_x, max_x, min_y, max_y, x: min_x, y: min_y }
+        SparseGridIterator {
+            grid,
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+            x: min_x,
+            y: min_y,
+        }
     }
 }
 
-impl<'a> Iterator for SparseGrid<'a> {
+impl<'a> IntoGridIterator for &'a HashMap<(i128, i128), i128> {
+    type IntoGridIter = SparseGridIterator<'a>;
+
+    fn grid_iter(&self) -> Self::IntoGridIter {
+        SparseGridIterator::new(self)
+    }
+}
+
+impl<'a> Iterator for SparseGridIterator<'a> {
     type Item = GridValue;
 
     fn next(&mut self) -> Option<Self::Item> {
-	let mut next_x = self.x + 1;
-	let mut next_y = self.y;
-	let mut end_row = false;
-	if next_x > self.max_x {
-	    next_x = self.min_x;
-	    end_row = true;
-	    next_y += 1;
-	}
-	if next_x > self.max_x || next_y > self.max_y {
-	    None
-	} else {
-	    self.x = next_x;
-	    self.y = next_y;
-	    let v = if let Some(x) = self.grid.get(&(next_x, next_y)) {
-		Some(*x)
-	    } else {
-		None
-	    };
-	    Some(GridValue{x: self.x - self.min_y, y: self.y - self.min_y, end_row: end_row, value: v})
-	}
+        let mut next_x = self.x + 1;
+        let mut next_y = self.y;
+        let mut end_row = false;
+        if next_x > self.max_x {
+            next_x = self.min_x;
+            end_row = true;
+            next_y += 1;
+        }
+        if next_x > self.max_x || next_y > self.max_y {
+            None
+        } else {
+            self.x = next_x;
+            self.y = next_y;
+            let v = if let Some(x) = self.grid.get(&(next_x, next_y)) {
+                Some(*x)
+            } else {
+                None
+            };
+            Some(GridValue {
+                x: self.x - self.min_y,
+                y: self.y - self.min_y,
+                end_row: end_row,
+                value: v,
+            })
+        }
     }
 }
 
@@ -121,18 +147,20 @@ impl<'a> Iterator for SparseGrid<'a> {
 
 pub trait GridDrawer<G>
 where
-    G: Iterator<Item = GridValue>,
+    G: IntoGridIterator,
+    <G as IntoGridIterator>::IntoGridIter: std::iter::Iterator<Item = GridValue>,
 {
-    fn draw(&mut self, area: &mut G);
+    fn draw(&mut self, area: &G);
 }
 
 pub struct NopGridDrawer {}
 
 impl<G> GridDrawer<G> for NopGridDrawer
 where
-    G: Iterator<Item = GridValue>,
+    G: IntoGridIterator,
+    <G as IntoGridIterator>::IntoGridIter: std::iter::Iterator<Item = GridValue>,
 {
-    fn draw(&mut self, _: &mut G) {}
+    fn draw(&mut self, _: &G) {}
 }
 
 pub struct PrintGridDrawer<F>
@@ -158,24 +186,20 @@ where
 impl<F, G> GridDrawer<G> for PrintGridDrawer<F>
 where
     F: Fn(i128) -> char,
-    G: Iterator<Item = GridValue>,
+    G: IntoGridIterator,
+    <G as IntoGridIterator>::IntoGridIter: std::iter::Iterator<Item = GridValue>,
 {
-    fn draw(&mut self, area: &mut G) {
-	loop {
-	    match area.next() {
-		Some(gv) => {
-		    let ch = if let Some(v) = gv.value {
-			self.to_char(v)
-		    } else {
-			' '
-		    };
-		    print!("{}", ch);
-		    if gv.end_row {
-			println!();
-		    }
-		},
-		_ => break
-	    }
+    fn draw(&mut self, area: &G) {
+        for gv in area.grid_iter() {
+            let ch = if let Some(v) = gv.value {
+                self.to_char(v)
+            } else {
+                ' '
+            };
+            print!("{}", ch);
+            if gv.end_row {
+                println!();
+            }
         }
     }
 }
@@ -220,21 +244,18 @@ where
 impl<F, G> GridDrawer<G> for CursesGridDrawer<F>
 where
     F: Fn(i128) -> char,
-    G: Iterator<Item = GridValue>,
+    G: IntoGridIterator,
+    <G as IntoGridIterator>::IntoGridIter: std::iter::Iterator<Item = GridValue>,
 {
-    fn draw(&mut self, area: &mut G) {
+    fn draw(&mut self, area: &G) {
         self.window.clear();
-	loop {
-	    match area.next() {
-		Some(gv) => {
-		    if let Some(v) = gv.value {
-			self.window.mvaddch(gv.y as i32, gv.x as i32, self.to_char(v));
-		    }
-		}
-		_ => break,
-	    }
-	}
-	if let Some(pancurses::Input::Character(c)) = self.window.getch() {
+        for gv in area.grid_iter() {
+            if let Some(v) = gv.value {
+                self.window
+                    .mvaddch(gv.y as i32, gv.x as i32, self.to_char(v));
+            }
+        }
+        if let Some(pancurses::Input::Character(c)) = self.window.getch() {
             if c == 'q' {
                 pancurses::endwin();
                 std::process::exit(0);

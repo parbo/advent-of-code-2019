@@ -1,5 +1,6 @@
 use aoc;
 use aoc::GridDrawer;
+use aoc::IntoGridIterator;
 use std::collections::HashMap;
 use std::iter::*;
 
@@ -22,13 +23,13 @@ fn get_new_pos(pos: (i128, i128), dir: i128) -> (i128, i128) {
     }
 }
 
-fn walk(
+fn walk<T>(
     m: &mut intcode::Machine,
     path: Vec<i128>,
     pos: (i128, i128),
     seen: &mut HashMap<(i128, i128), i128>,
-    drawer: &mut dyn aoc::GridDrawer<HashMap<(i128, i128), i128>>,
-) -> Option<Vec<i128>> {
+    drawer: &mut dyn aoc::GridDrawer<T>,
+) -> Option<Vec<i128>> where T: aoc::IntoGridIterator {
     let mut paths = vec![];
     for d in 1..=4 {
         //  north (1), south (2), west (3), and east (4)
@@ -40,7 +41,7 @@ fn walk(
         mc.add_input(d);
         let out = mc.run_to_next_output().unwrap();
         seen.insert(new_pos, out);
-        drawer.draw(&mut aoc::SparseGrid{&seen});
+        drawer.draw(&seen);
         let pp = match out {
             0 => {
                 // Wall, do not expand in this direction
@@ -103,7 +104,7 @@ fn part2(program: &Vec<i128>) -> i128 {
         if expand.len() == 0 {
             break;
         }
-        d.draw(&mut aoc::SparseGrid{&seen});
+        d.draw(&seen);
     }
     minutes
 }
