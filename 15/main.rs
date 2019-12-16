@@ -40,7 +40,7 @@ fn walk(
         mc.add_input(d);
         let out = mc.run_to_next_output().unwrap();
         seen.insert(new_pos, out);
-        drawer.draw(seen);
+        drawer.draw(&mut aoc::SparseGrid{&seen});
         let pp = match out {
             0 => {
                 // Wall, do not expand in this direction
@@ -103,7 +103,7 @@ fn part2(program: &Vec<i128>) -> i128 {
         if expand.len() == 0 {
             break;
         }
-        d.draw(&seen);
+        d.draw(&mut aoc::SparseGrid{&seen});
     }
     minutes
 }
