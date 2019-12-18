@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::iter::*;
+use pathfinding::prelude::dijkstra;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct KeyState {
@@ -22,177 +23,50 @@ impl KeyState {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
-struct State {
-    cost: usize,
-    position: (usize, usize), // y, x
-}
-
-// The priority queue depends on `Ord`.
-// Explicitly implement the trait so the queue becomes a min-heap
-// instead of a max-heap.
-impl Ord for State {
-    fn cmp(&self, other: &State) -> Ordering {
-        // Notice that the we flip the ordering on costs.
-        // In case of a tie we compare positions - this step is necessary
-        // to make implementations of `PartialEq` and `Ord` consistent.
-        other
-            .cost
-            .cmp(&self.cost)
-            .then_with(|| other.position.0.cmp(&self.position.0))
-            .then_with(|| other.position.1.cmp(&self.position.1))
-    }
-}
-
-// `PartialOrd` needs to be implemented as well.
-impl PartialOrd for State {
-    fn partial_cmp(&self, other: &State) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 struct Map<'a> {
     map: &'a Vec<Vec<char>>,
+    position: (usize, usize),
     key_state: KeyState,
-    dist: HashMap<(usize, usize), usize>,
-    heap: BinaryHeap<State>,
-    came_from: HashMap<(usize, usize), (usize, usize)>,
 }
 
 impl<'a> Map<'a> {
-    fn new(map: &'a Vec<Vec<char>>, key_state: KeyState) -> Map<'a> {
-        let mut map = Map {
+    fn new(map: &'a Vec<Vec<char>>, position: (usize, usize), key_state: KeyState) -> Map<'a> {
+        Map {
             map,
+	    position,
             key_state,
-            dist: HashMap::new(),
-            heap: BinaryHeap::new(),
-            came_from: HashMap::new(),
-        };
-        map.dist.reserve(1024);
-        map.heap.reserve(1024);
-        map.came_from.reserve(1024);
-        map
+        }
     }
 }
 
-fn dijkstra_neighbours(state: &Map, pos: (usize, usize)) -> Vec<(usize, usize)> {
-    let mut n = vec![];
-    let y = pos.0 as i64;
-    let x = pos.1 as i64;
-    let w = state.map[0].len() as i64;
-    let h = state.map.len() as i64;
-    for (ny, nx) in &[(y - 1, x), (y, x - 1), (y, x + 1), (y + 1, x)] {
-        if *nx > w || *ny > h || *ny < 0 || *nx < 0 {
-            continue;
-        }
-        let p = (*ny as usize, *nx as usize);
-        let ch = state.map[p.0][p.1];
-        if ch == '#' {
-            // No action
-        } else if ch == '.' {
-            n.push((*ny as usize, *nx as usize));
-        } else if ch.is_ascii_lowercase() {
-            n.push((*ny as usize, *nx as usize));
-        } else if ch.is_ascii_uppercase() && state.key_state.get(ch.to_ascii_lowercase()) {
-            n.push((*ny as usize, *nx as usize));
-        }
+impl<'a> Map<'a> {
+    fn successors(&self) -> Vec<(Map<'a>, usize)> {
+	let mut n = vec![];
+	let pos = self.position;
+	let y = pos.0 as i64;
+	let x = pos.1 as i64;
+	let w = self.map[0].len() as i64;
+	let h = self.map.len() as i64;
+	for (ny, nx) in &[(y - 1, x), (y, x - 1), (y, x + 1), (y + 1, x)] {
+            if *nx > w || *ny > h || *ny < 0 || *nx < 0 {
+		continue;
+            }
+            let p = (*ny as usize, *nx as usize);
+            let ch = self.map[p.0][p.1];
+            if ch == '#' {
+		// No action
+            } else if ch == '.' || ch.is_ascii_lowercase() || (ch.is_ascii_uppercase() && self.key_state.get(ch.to_ascii_lowercase())) {
+		n.push((Map::new(self.map, (*ny as usize, *nx as usize), self.key_state), 1));
+            }
+	}
+	n
     }
-    n
 }
 
-// Dijkstra's shortest path algorithm.
-fn shortest_path(
-    state: &mut Map,
-    start: (usize, usize),
-    goal: (usize, usize),
-) -> Option<(usize, Vec<(usize, usize)>)> {
-    state.dist.clear();
-    state.heap.clear();
-    state.came_from.clear();
-
-    // We're at `start`, with a zero cost
-    state.dist.insert(start, 0);
-    state.heap.push(State {
-        cost: 0,
-        position: start,
-    });
-
-    let mut goal_cost = None;
-    let mut res = vec![];
-
-    // Examine the frontier with lower cost nodes first (min-heap)
-    while let Some(State { cost, position }) = state.heap.pop() {
-        if position == goal {
-            if let Some(gc) = goal_cost {
-                if cost == gc {
-                    let mut p: Vec<(usize, usize)> = vec![];
-                    let mut curr = goal;
-                    while curr != start {
-                        curr = *state.came_from.get(&curr).unwrap();
-                        p.push(curr)
-                    }
-                    res = p;
-                }
-            } else {
-                goal_cost = Some(cost);
-                let mut p: Vec<(usize, usize)> = vec![];
-                let mut curr = goal;
-                while curr != start {
-                    curr = *state.came_from.get(&curr).unwrap();
-                    p.push(curr)
-                }
-                res = p;
-            }
-        }
-
-        if let Some(gc) = goal_cost {
-            if cost > gc {
-                return Some((gc, res));
-            }
-        }
-
-        // Important as we may have already found a better way
-        if let Some(x) = state.dist.get(&position) {
-            if cost > *x {
-                continue;
-            }
-        }
-
-        // For each node we can reach, see if we can find a way with
-        // a lower cost going through this node
-        let neighbours = dijkstra_neighbours(state, position);
-        //        println!("neigh: {:?} => {:?}", position, neighbours);
-        for neighbour_position in &neighbours {
-            let next = State {
-                cost: cost + 1,
-                position: *neighbour_position,
-            };
-
-            let d = if let Some(x) = state.dist.get(&next.position) {
-                *x
-            } else {
-                std::usize::MAX
-            };
-
-            // If so, add it to the frontier and continue
-            if next.cost < d {
-                // Relaxation, we have now found a better way
-                state.dist.insert(next.position, next.cost);
-                state.heap.push(next);
-                // Remember the path
-                state.came_from.insert(*neighbour_position, position);
-            }
-        }
-    }
-
-    if let Some(gc) = goal_cost {
-        return Some((gc, res));
-    } else {
-        assert_eq!(res.len(), 0);
-    }
-
-    // Goal not reachable
-    None
+fn find_path<'a>(map: &'a Vec<Vec<char>>, keys: KeyState, start: (usize, usize), goal: (usize, usize)) -> Option<(Vec<Map<'a>>, usize)> {
+    let m = Map::new(map, start, keys);
+    dijkstra(&m, |p| p.successors(), |p| p.position == goal)
 }
 
 fn find_keys(map: &Vec<Vec<char>>) -> HashMap<(usize, usize), char> {
@@ -223,8 +97,8 @@ fn find_self(map: &Vec<Vec<char>>) -> Option<(usize, usize)> {
     None
 }
 
-fn total_cost(paths: &Vec<(usize, Vec<(usize, usize)>)>) -> usize {
-    paths.iter().map(|x| x.1.len()).sum()
+fn total_cost<'a>(paths: &Vec<(Vec<Map<'a>>, usize)>) -> usize {
+    paths.iter().map(|x| x.0.len()).sum()
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -234,16 +108,16 @@ struct MapState {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct PathState {
+struct PathState<'a> {
     cost: usize,
     map_state: MapState,
-    paths: Vec<(usize, Vec<(usize, usize)>)>,
+    paths: Vec<(Vec<Map<'a>>, usize)>,
 }
 
 // The priority queue depends on `Ord`.
 // Explicitly implement the trait so the queue becomes a min-heap
 // instead of a max-heap.
-impl Ord for PathState {
+impl<'a> Ord for PathState<'a> {
     fn cmp(&self, other: &PathState) -> Ordering {
         // Notice that the we flip the ordering on costs.
         // In case of a tie we compare positions - this step is necessary
@@ -256,7 +130,7 @@ impl Ord for PathState {
 }
 
 // `PartialOrd` needs to be implemented as well.
-impl PartialOrd for PathState {
+impl<'a> PartialOrd for PathState<'a> {
     fn partial_cmp(&self, other: &PathState) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -274,10 +148,6 @@ fn solve<'a>(map: &'a Vec<Vec<char>>, curr: &Vec<(usize, usize)>) -> usize {
         },
         paths: vec![],
     });
-    let mut cached_paths: HashMap<
-        ((usize, usize), (usize, usize), KeyState),
-        Option<(usize, Vec<(usize, usize)>)>,
-    > = HashMap::new();
 
     let mut goal_cost = None;
     let mut res = vec![];
@@ -334,28 +204,16 @@ fn solve<'a>(map: &'a Vec<Vec<char>>, curr: &Vec<(usize, usize)>) -> usize {
             for i in 0..pos_len {
                 let rob_pos = map_state.positions[i];
                 total += 1;
-                let mp = match cached_paths.get(&(rob_pos, *pos, map_state.keys)) {
-                    None => {
-                        let mut m = Map::new(&map, map_state.keys);
-                        let res = shortest_path(&mut m, rob_pos, *pos);
-                        cached_paths.insert((rob_pos, *pos, map_state.keys), res.clone());
-                        res
-                    }
-                    Some(x) => {
-                        cached += 1;
-                        x.clone()
-                    }
-                };
-                if let Some(p) = mp {
-                    // println!("found path from {:?} {}, to {} at {:?}", map_state.positions, i, key, pos);
+                if let Some(p) = find_path(&map, map_state.keys, rob_pos, *pos) {
+                    println!("found path from {:?} {}, to {} at {:?}", map_state.positions, i, key, pos);
                     // println!("{:?}", p);
                     let mut new_paths = paths.clone();
                     new_paths.push(p.clone());
 
                     let mut new_keys = map_state.keys;
                     new_keys.set(*key);
-                    p.1.iter().for_each(|p| {
-                        if let Some(k) = all_keys.get(p) {
+                    p.0.iter().for_each(|p| {
+                        if let Some(k) = all_keys.get(&p.position) {
                             new_keys.set(*k);
                         }
                     });
