@@ -2,6 +2,8 @@ use aoc;
 use aoc::GridDrawer;
 use std::collections::HashMap;
 use std::iter::*;
+use cached::cached_key;
+use cached::UnboundCache;
 
 fn make_grid(
     program: &Vec<i128>,
@@ -45,22 +47,26 @@ fn part1(program: &Vec<i128>) -> i128 {
     grid.iter().filter(|(_, v)| **v == 1).count() as i128
 }
 
-fn get_beam_at(program: &Vec<i128>, y: i128) -> (i128, i128) {
-    let mut s = 0;
-    let mut x = 0;
-    loop {
-        let mut mach = intcode::Machine::new(program);
-        mach.add_input(x as i128);
-        mach.add_input(y as i128);
-        if let Some(v) = mach.run_to_next_output() {
-            if v == 1 && s == 0 {
-                s = x;
+cached_key!{
+    GET_BEAM_AT: UnboundCache<i128, (i128, i128)> = UnboundCache::new();
+    Key = y;
+    fn get_beam_at(program: &Vec<i128>, y: i128) -> (i128, i128) = {
+	let mut s = 0;
+	let mut x = 0;
+	loop {
+            let mut mach = intcode::Machine::new(program);
+            mach.add_input(x as i128);
+            mach.add_input(y as i128);
+            if let Some(v) = mach.run_to_next_output() {
+		if v == 1 && s == 0 {
+                    s = x;
+		}
+		if v == 0 && s > 0 {
+                    return (s, x);
+		}
             }
-            if v == 0 && s > 0 {
-                return (s, x);
-            }
-        }
-        x += 1;
+            x += 1;
+	}
     }
 }
 
