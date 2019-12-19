@@ -48,6 +48,7 @@ fn part1(program: &Vec<i128>) -> i128 {
 fn get_beam_at(program: &Vec<i128>, y: i128) -> (i128, i128) {
     let mut s = 0;
     let mut x = 0;
+    // Scan for start
     loop {
         let mut mach = intcode::Machine::new(program);
         mach.add_input(x as i128);
@@ -55,13 +56,36 @@ fn get_beam_at(program: &Vec<i128>, y: i128) -> (i128, i128) {
         if let Some(v) = mach.run_to_next_output() {
             if v == 1 && s == 0 {
                 s = x;
-            }
-            if v == 0 && s > 0 {
-                return (s, x);
+                break;
             }
         }
         x += 1;
     }
+    // Binary search for end
+    let mut a: i128 = s;
+    let mut b: i128 = s + 500;
+    let e = loop {
+        let m = (a + b) / 2;
+        let mut out = [-1, -1];
+        for i in 0..2 {
+            let mut mach = intcode::Machine::new(program);
+            mach.add_input(m + i as i128);
+            mach.add_input(y as i128);
+            if let Some(v) = mach.run_to_next_output() {
+                out[i] = v;
+            }
+        }
+        if out[0] == 1 && out[1] == 1 {
+            a = m + 1;
+        }
+        if out[0] == 0 {
+            b = m - 1;
+        }
+        if out[0] == 1 && out[1] == 0 {
+            break m + 1;
+        }
+    };
+    (s, e)
 }
 
 fn part2(program: &Vec<i128>) -> i128 {
