@@ -9,7 +9,10 @@ use std::io::BufReader;
 use std::iter::*;
 use std::path::Path;
 
+pub use num::FromPrimitive;
+pub use num::ToPrimitive;
 pub use num::integer::*;
+pub use num::bigint::BigInt;
 pub use serde_scan::from_str;
 pub use serde_scan::scan;
 

@@ -1,5 +1,6 @@
 use aoc;
 use std::iter::*;
+use aoc::BigInt;
 
 enum Shuffle {
     DealIntoNewStack,
@@ -7,19 +8,19 @@ enum Shuffle {
     DealWithIncrement(usize),
 }
 
-fn pos_mod(x: i128, y: i128) -> i128 {
-  let mut xx = x;
-  while xx < 0 {
+fn pos_mod(x: &BigInt, y: &BigInt) -> BigInt {
+  let mut xx = x.clone();
+  while xx < aoc::FromPrimitive::from_i32(0).unwrap() {
       xx += y;
   }
-  while xx >= y {
+  while xx >= *y {
       xx -= y;
   }
   xx
 }
 
-fn shuffle_idx(how: &Vec<Shuffle>, len: i128, idx: i128) -> i128 {
-    let mut new_idx = idx;
+fn shuffle_idx(how: &Vec<Shuffle>, len: &BigInt, idx: &BigInt) -> BigInt {
+    let mut new_idx = idx.clone();
     // println!("====== {}", idx);
     for s in how {
         match s {
@@ -27,78 +28,63 @@ fn shuffle_idx(how: &Vec<Shuffle>, len: i128, idx: i128) -> i128 {
 		new_idx = len - new_idx - 1;
             }
             Shuffle::Cut(x) => {
-                new_idx = new_idx + len - *x as i128;
+		let xx : BigInt = aoc::FromPrimitive::from_i64(*x).unwrap();
+                new_idx = new_idx.clone() + len - xx;
             }
             Shuffle::DealWithIncrement(x) => {
-                new_idx = new_idx * *x as i128;
+		let xx : BigInt = aoc::FromPrimitive::from_usize(*x).unwrap();
+                new_idx = new_idx.clone() * xx;
             }
         }
 	// println!("{}, {}", new_idx, pos_mod(new_idx, len));
-	new_idx = pos_mod(new_idx, len);
     }
     new_idx
 }
 
-fn shuffle(how: &Vec<Shuffle>, len: i128) -> Vec<i128> {
-    let deck: Vec<i128> = (0..len).into_iter().collect();
-    let mut new_deck = vec![0; len as usize];
+fn shuffle(how: &Vec<Shuffle>, len: i128) -> Vec<BigInt> {
+    let deck: Vec<BigInt> = (0..len).into_iter().map(|x| aoc::FromPrimitive::from_i128(x).unwrap()).collect();
+    let mut new_deck : Vec<BigInt> = Vec::new();
+    new_deck.resize(len as usize, aoc::FromPrimitive::from_i32(0).unwrap());
+    let big_len : BigInt = aoc::FromPrimitive::from_i128(len).unwrap();
     for i in 0..len {
-        let x = shuffle_idx(how, len, i);
+	let ii = aoc::FromPrimitive::from_i128(i).unwrap();
+        let x = shuffle_idx(how, &big_len, &ii);
 	println!("x: {}, i: {}", x, i);
-        new_deck[x as usize] = deck[i as usize];
+	let ii : usize = aoc::ToPrimitive::to_usize(&i).unwrap();
+	let xx : usize = aoc::ToPrimitive::to_usize(&pos_mod(&x, &big_len)).unwrap();
+        new_deck[xx] = deck[ii].clone();
     }
     new_deck
 }
 
-fn part1(input: &Vec<Shuffle>) -> i128 {
+fn part1(input: &Vec<Shuffle>) -> BigInt {
     let len = 10007i128;
     let shuffled = shuffle(input, len);
-    shuffled
+    aoc::FromPrimitive::from_usize(shuffled
         .iter()
         .enumerate()
-        .find(|(_, x)| **x == 2019)
+        .find(|(_, x)| **x == aoc::FromPrimitive::from_i32(2019).unwrap())
         .unwrap()
-        .0 as i128
+        .0).unwrap()
 }
 
-fn part2(input: &Vec<Shuffle>) -> i128 {
-    let len = 119315717514047i128;
-    let times = 101741582076661i128;
-    println!(
-        "{}, {}, {}, {}",
-        len / times,
-        len % times,
-        aoc::gcd(len, times),
-        aoc::lcm(len, times)
-    );
+fn part2(input: &Vec<Shuffle>) -> BigInt {
+    let len : BigInt = aoc::FromPrimitive::from_i128(119315717514047i128).unwrap();
+    let times : BigInt = aoc::FromPrimitive::from_i128(101741582076661i128).unwrap();
+    // println!(
+    //     "{}, {}, {}, {}",
+    //     len / times,
+    //     len % times,
+    //     aoc::gcd(len, times),
+    //     aoc::lcm(len, times)
+    // );
     let mut i = 0;
-    let mut ix = 2020;
-    loop {
-        let new_ix = shuffle_idx(input, len, ix);
-        // if new_ix >= ix {
-        //     println!("> {}, {}, {}", new_ix - ix, new_ix / ix, new_ix % ix);
-        // } else {
-        //     println!(
-        //         "< {}, {}, {}",
-        //         (len + new_ix - ix),
-        //         (len + new_ix) / ix,
-        //         (len + new_ix) % ix
-        //     );
-        // }
-        ix = new_ix;
-        i += 1;
-        // if i == 10 {
-        //     break;
-        // }
-        if i % 1000000 == 0 {
-            println!("{}, {:?}", i, new_ix);
-        }
-        if new_ix == 2020 {
-            break;
-        }
-    }
-    println!("{}", i);
-    0
+    let wanted : BigInt = aoc::FromPrimitive::from_i32(2020).unwrap();
+    let mut ix = wanted.clone();
+    let new_ix = shuffle_idx(input, &len, &ix);
+    let ans = times * (new_ix.clone() - ix.clone());
+    let ans2 = pos_mod(&ans, &len);
+    ans2
 }
 
 fn parse(lines: &Vec<String>) -> Vec<Shuffle> {
@@ -131,7 +117,13 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use aoc::BigInt;
     use super::{parse, shuffle};
+
+    fn bigv(v: &[i32]) -> Vec<BigInt> {
+    	let out : Vec<BigInt> = v.iter().map(|x| aoc::FromPrimitive::from_i32(*x).unwrap()).collect();
+	out
+    }
 
     #[test]
     fn test_shuffle_rev() {
@@ -139,7 +131,7 @@ mod tests {
             "deal into new stack".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0]));
     }
 
     #[test]
@@ -149,7 +141,7 @@ mod tests {
             "deal into new stack".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
     }
 
     #[test]
@@ -158,7 +150,7 @@ mod tests {
             "deal with increment 1".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
     }
 
     #[test]
@@ -167,7 +159,7 @@ mod tests {
             "deal with increment 3".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![0, 7, 4, 1, 8, 5, 2, 9, 6, 3]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![0, 7, 4, 1, 8, 5, 2, 9, 6, 3]));
     }
 
     #[test]
@@ -176,7 +168,7 @@ mod tests {
             "cut 3".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![3, 4, 5, 6, 7, 8, 9, 0, 1, 2]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![3, 4, 5, 6, 7, 8, 9, 0, 1, 2]));
     }
 
     #[test]
@@ -185,7 +177,7 @@ mod tests {
             "cut -4".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![6, 7, 8, 9, 0, 1, 2, 3, 4, 5]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![6, 7, 8, 9, 0, 1, 2, 3, 4, 5]));
     }
 
     #[test]
@@ -195,7 +187,7 @@ mod tests {
             "deal into new stack".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![3, 6, 9, 2, 5, 8, 1, 4, 7, 0]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![3, 6, 9, 2, 5, 8, 1, 4, 7, 0]));
     }
 
     #[test]
@@ -206,7 +198,7 @@ mod tests {
             "deal into new stack".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![0, 3, 6, 9, 2, 5, 8, 1, 4, 7]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![0, 3, 6, 9, 2, 5, 8, 1, 4, 7]));
     }
 
     #[test]
@@ -217,7 +209,7 @@ mod tests {
             "deal into new stack".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![3, 0, 7, 4, 1, 8, 5, 2, 9, 6]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![3, 0, 7, 4, 1, 8, 5, 2, 9, 6]));
     }
 
     #[test]
@@ -228,7 +220,7 @@ mod tests {
             "cut -2".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![6, 3, 0, 7, 4, 1, 8, 5, 2, 9]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![6, 3, 0, 7, 4, 1, 8, 5, 2, 9]));
     }
 
     #[test]
@@ -246,6 +238,6 @@ mod tests {
             "cut -1".to_string(),
         ];
         let how = parse(&input);
-        assert_eq!(shuffle(&how, 10), vec![9, 2, 5, 8, 1, 4, 7, 0, 3, 6]);
+        assert_eq!(shuffle(&how, 10), bigv(&vec![9, 2, 5, 8, 1, 4, 7, 0, 3, 6]));
     }
 }
