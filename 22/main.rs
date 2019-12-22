@@ -9,14 +9,7 @@ enum Shuffle {
 }
 
 fn pos_mod(x: &BigInt, y: &BigInt) -> BigInt {
-  let mut xx = x.clone();
-  while xx < aoc::FromPrimitive::from_i32(0).unwrap() {
-      xx += y;
-  }
-  while xx >= *y {
-      xx -= y;
-  }
-  xx
+    ((a % b) + b) % b
 }
 
 fn shuffle_idx(how: &Vec<Shuffle>, len: &BigInt, idx: &BigInt) -> BigInt {
@@ -81,10 +74,12 @@ fn part2(input: &Vec<Shuffle>) -> BigInt {
     let mut i = 0;
     let wanted : BigInt = aoc::FromPrimitive::from_i32(2020).unwrap();
     let mut ix = wanted.clone();
-    let new_ix = shuffle_idx(input, &len, &ix);
-    let ans = times * (new_ix.clone() - ix.clone());
-    let ans2 = pos_mod(&ans, &len);
-    ans2
+    let new_ix = pos_mod(&shuffle_idx(input, &len, &ix), &len);
+    let nix : i128 = aoc::ToPrimitive::to_i128(&new_ix).unwrap();
+    // let ans = (new_ix.clone() - ix.clone());
+    // let ans2 = pos_mod(&pos_mod(&ans, &len), &times);
+    println!("nix: {}", nix);
+    new_ix
 }
 
 fn parse(lines: &Vec<String>) -> Vec<Shuffle> {
